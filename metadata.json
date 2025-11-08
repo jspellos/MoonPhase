@@ -1,0 +1,7 @@
+{
+  "name": "MoonPhase",
+  "description": "A modern web app to display moon phases, rise/set times, and NASA's Astronomy Picture of the Day for any location and date.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
