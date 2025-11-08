@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { MoonData, ApodData } from './types';
 import { getMoonData, getSpacePhotograph } from './services/geminiService';
 import { Header } from './components/Header';
@@ -16,32 +16,44 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = useCallback(async (loc: string, dt: Date) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      // Use Promise.all to fetch factual moon data and creative image data in parallel
-      const [moonResult, apodResult] = await Promise.all([
-        getMoonData(loc, dt),
-        getSpacePhotograph(dt)
-      ]);
-      
-      setMoonData(moonResult);
-      setApodData({ ...apodResult, media_type: 'image' });
-
-    } catch (err) {
-      setError('Could not fetch astronomical data. Please try a different location or date.');
-      console.error(err);
-      setMoonData(null);
-      setApodData(null);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
+  // Fetch core moon data first for a fast initial load.
   useEffect(() => {
-    fetchData(location, date);
-  }, [location, date, fetchData]);
+    const fetchCoreData = async () => {
+      setIsLoading(true);
+      setError(null);
+      setMoonData(null);
+      setApodData(null); // Clear both on new request
+
+      try {
+        const moonResult = await getMoonData(location, date);
+        setMoonData(moonResult);
+      } catch (err) {
+        setError('Could not fetch astronomical data. Please try a different location or date.');
+        console.error(err);
+        setMoonData(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchCoreData();
+  }, [location, date]);
+  
+  // Fetch the secondary data (APOD) after the core data has loaded successfully.
+  useEffect(() => {
+    if (moonData) { // Only fetch if core data loaded
+        const fetchImageData = async () => {
+            try {
+                const apodResult = await getSpacePhotograph(date);
+                setApodData({ ...apodResult, media_type: 'image' });
+            } catch (err) {
+                console.error("Failed to fetch space photograph:", err);
+                setApodData(null); // Ensure it's null on failure
+            }
+        };
+        fetchImageData();
+    }
+  }, [moonData, date]);
 
 
   const handleLocationUpdate = (newLocation: string) => {
@@ -91,6 +103,7 @@ const App: React.FC = () => {
             <>
               <MoonDisplay data={moonData} />
               <div className="mt-8">
+                {/* APOD card will render once its data is fetched, or show nothing */}
                 <ApodCard data={apodData} />
               </div>
             </>

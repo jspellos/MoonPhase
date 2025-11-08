@@ -122,11 +122,11 @@ export const getMoonData = async (location: string, date: Date): Promise<MoonDat
  */
 export const getSpacePhotograph = async (date: Date): Promise<Omit<ApodData, 'media_type'>> => {
   const dateString = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-  const prompt = `Find a beautiful, high-quality, public domain space photograph with a title and brief explanation, relevant for the date ${dateString}. Respond ONLY with a single, raw JSON object in the format: {"title": "...", "url": "...", "explanation": "..."}. The URL must be a direct link to an image file (e.g., .jpg, .png).`;
+  const prompt = `Find a beautiful, high-quality, public domain space photograph with a title and brief explanation, relevant for the date ${dateString}. Respond ONLY with a single, raw JSON object in the format: {"title": "...", "url": "...", "explanation": "..."}. The URL must be a direct link to an image file (e.g., .jpg, .png) and MUST start with "https://".`;
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-pro', // Use a more creative model for this task
+      model: 'gemini-2.5-flash', // Use faster model for better performance
       contents: prompt,
     });
     
