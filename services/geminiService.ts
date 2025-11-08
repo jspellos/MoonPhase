@@ -4,56 +4,16 @@ import type { MoonData, ApodData } from '../types';
 // FIX: Per @google/genai guidelines, initialize directly with process.env.API_KEY.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-const moonDataSchema = {
-  type: Type.OBJECT,
-  properties: {
-    moonrise: {
-      type: Type.STRING,
-      description: 'The time of moonrise in a "HH:MM AM/PM" format. If it does not rise, return "Not visible".',
-    },
-    moonset: {
-      type: Type.STRING,
-      description: 'The time of moonset in a "HH:MM AM/PM" format. If it does not set, return "Not visible".',
-    },
-    phase: {
-      type: Type.STRING,
-      description: 'The name of the moon phase (e.g., "New Moon", "Waxing Crescent", "First Quarter", "Waxing Gibbous", "Full Moon", "Waning Gibbous", "Last Quarter", "Waning Crescent").',
-    },
-    illumination: {
-      type: Type.NUMBER,
-      description: 'The percentage of the moon that is illuminated, as a number from 0 to 100.',
-    },
-  },
-  required: ['moonrise', 'moonset', 'phase', 'illumination'],
-};
-
-const apodDataSchema = {
-    type: Type.OBJECT,
-    properties: {
-        title: {
-            type: Type.STRING,
-            description: 'The title of the NASA Astronomy Picture of the Day (APOD).',
-        },
-        url: {
-            type: Type.STRING,
-            description: 'The URL of the image or video for the APOD. If it is an image, provide the standard or HD URL. If it is a video, provide the URL to the video source (e.g., a YouTube link).',
-        },
-        media_type: {
-            type: Type.STRING,
-            description: 'The type of media, either "image" or "video".',
-        },
-        explanation: {
-            type: Type.STRING,
-            description: 'A brief explanation of the Astronomy Picture of the Day.',
-        }
-    },
-    required: ['title', 'url', 'media_type', 'explanation'],
-};
-
 export const getMoonData = async (location: string, date: Date): Promise<MoonData> => {
   const dateString = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   
-  const prompt = `Using Google Search for accuracy, provide the moonrise, moonset, moon phase, and illumination percentage for "${location}" on ${dateString}. Format the final answer as a single, clean JSON object with the following keys and value types:
+  // Check if the location string is a lat/long pair to provide better context to the model.
+  const isCoordinates = /^(-?\d+\.?\d*),\s*(-?\d+\.?\d*)$/.test(location);
+  const locationDescription = isCoordinates
+    ? `the geographic coordinates (latitude, longitude) "${location}"`
+    : `the location "${location}"`;
+
+  const prompt = `Using Google Search for accuracy, provide the moonrise, moonset, moon phase, and illumination percentage for ${locationDescription} on ${dateString}. Format the final answer as a single, clean JSON object with the following keys and value types:
 - "moonrise": string (e.g., "8:30 PM" or "Not visible")
 - "moonset": string (e.g., "7:15 AM" or "Not visible")
 - "phase": string (e.g., "Waxing Crescent")
@@ -92,19 +52,30 @@ export const getMoonData = async (location: string, date: Date): Promise<MoonDat
 };
 
 export const getApodData = async (): Promise<ApodData> => {
-  const prompt = `What is the NASA Astronomy Picture of the Day (APOD) for today? Provide the title, URL for the media, the media type (image or video), and a brief explanation.`;
+  const prompt = `Using Google Search, find a beautiful and awe-inspiring space photograph. Provide a title for the image, the direct URL for the media, the media type (which should be "image"), and a brief explanation. Format the final answer as a single, clean JSON object with the following keys:
+- "title": string
+- "url": string
+- "media_type": string (should be "image")
+- "explanation": string`;
   
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
       config: {
-        responseMimeType: 'application/json',
-        responseSchema: apodDataSchema,
+        // Use Google Search for robust image finding.
+        tools: [{googleSearch: {}}],
       },
     });
 
-    const jsonString = response.text.trim();
+    let jsonString = response.text.trim();
+    
+    // The model might wrap the JSON in markdown backticks, so we need to extract it.
+    const jsonMatch = jsonString.match(/```(json)?\s*([\s\S]*?)\s*```/);
+    if (jsonMatch && jsonMatch[2]) {
+      jsonString = jsonMatch[2];
+    }
+
     const data = JSON.parse(jsonString) as ApodData;
 
     if (!data.title || !data.url || !data.media_type) {
@@ -113,7 +84,7 @@ export const getApodData = async (): Promise<ApodData> => {
 
     return data;
   } catch (error) {
-    console.error("Error fetching APOD data from Gemini:", error);
-    throw new Error("Failed to retrieve Astronomy Picture of the Day.");
+    console.error("Error fetching space photo from Gemini with Search:", error);
+    throw new Error("Failed to retrieve a space photograph.");
   }
 };
