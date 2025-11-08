@@ -53,30 +53,41 @@ const apodDataSchema = {
 export const getMoonData = async (location: string, date: Date): Promise<MoonData> => {
   const dateString = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   
-  const prompt = `Provide the moon data for the location "${location}" on the date ${dateString}.`;
+  const prompt = `Using Google Search for accuracy, provide the moonrise, moonset, moon phase, and illumination percentage for "${location}" on ${dateString}. Format the final answer as a single, clean JSON object with the following keys and value types:
+- "moonrise": string (e.g., "8:30 PM" or "Not visible")
+- "moonset": string (e.g., "7:15 AM" or "Not visible")
+- "phase": string (e.g., "Waxing Crescent")
+- "illumination": number (e.g., 15.3)`;
   
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
       config: {
-        responseMimeType: 'application/json',
-        responseSchema: moonDataSchema,
+        // Use Google Search for accurate, real-time data, which is required for this query.
+        tools: [{googleSearch: {}}],
       },
     });
 
-    const jsonString = response.text.trim();
+    let jsonString = response.text.trim();
+    
+    // The model might wrap the JSON in markdown backticks, so we need to extract it.
+    const jsonMatch = jsonString.match(/```(json)?\s*([\s\S]*?)\s*```/);
+    if (jsonMatch && jsonMatch[2]) {
+      jsonString = jsonMatch[2];
+    }
+
     const data = JSON.parse(jsonString) as MoonData;
 
     // Basic validation
-    if (!data.phase || typeof data.illumination === 'undefined') {
+    if (!data.phase || typeof data.illumination === 'undefined' || !data.moonrise || !data.moonset) {
         throw new Error("Invalid data structure received from API");
     }
 
     return data;
   } catch (error) {
-    console.error("Error fetching moon data from Gemini:", error);
-    throw new Error("Failed to retrieve moon data.");
+    console.error("Error fetching moon data from Gemini with Search:", error);
+    throw new Error("Failed to retrieve accurate moon data.");
   }
 };
 
