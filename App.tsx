@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import type { MoonData, ApodData } from './types';
-import { getMoonData, getApodData } from './services/geminiService';
+import { getMoonData, getSpacePhotograph } from './services/geminiService';
 import { Header } from './components/Header';
 import { MoonDisplay } from './components/MoonDisplay';
 import { ApodCard } from './components/ApodCard';
@@ -13,45 +13,36 @@ const App: React.FC = () => {
   const [date, setDate] = useState<Date>(new Date());
   const [moonData, setMoonData] = useState<MoonData | null>(null);
   const [apodData, setApodData] = useState<ApodData | null>(null);
-  const [isLoadingMoonData, setIsLoadingMoonData] = useState<boolean>(true);
-  const [isLoadingApodData, setIsLoadingApodData] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchMoonData = useCallback(async (loc: string, dt: Date) => {
-    setIsLoadingMoonData(true);
+  const fetchData = useCallback(async (loc: string, dt: Date) => {
+    setIsLoading(true);
     setError(null);
     try {
-      const data = await getMoonData(loc, dt);
-      setMoonData(data);
-    } catch (err) {
-      setError('Could not fetch moon data. Please try a different location or date.');
-      console.error(err);
-    } finally {
-      setIsLoadingMoonData(false);
-    }
-  }, []);
+      // Use Promise.all to fetch factual moon data and creative image data in parallel
+      const [moonResult, apodResult] = await Promise.all([
+        getMoonData(loc, dt),
+        getSpacePhotograph(dt)
+      ]);
+      
+      setMoonData(moonResult);
+      setApodData({ ...apodResult, media_type: 'image' });
 
-  const fetchApodData = useCallback(async () => {
-    setIsLoadingApodData(true);
-    try {
-      const data = await getApodData();
-      setApodData(data);
     } catch (err) {
-      setError('Could not fetch Space History data.');
+      setError('Could not fetch astronomical data. Please try a different location or date.');
       console.error(err);
+      setMoonData(null);
+      setApodData(null);
     } finally {
-      setIsLoadingApodData(false);
+      setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchMoonData(location, date);
-  }, [location, date, fetchMoonData]);
+    fetchData(location, date);
+  }, [location, date, fetchData]);
 
-  useEffect(() => {
-    fetchApodData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const handleLocationUpdate = (newLocation: string) => {
     setLocation(newLocation);
@@ -67,8 +58,8 @@ const App: React.FC = () => {
         const { latitude, longitude } = position.coords;
         // Gemini can understand coordinates
         setLocation(`${latitude}, ${longitude}`);
-      }, (error) => {
-        console.error("Geolocation error:", error);
+      }, (geoError) => {
+        console.error("Geolocation error:", geoError);
         setError("Could not get current location. Please enable location services.");
       });
     } else {
@@ -96,10 +87,14 @@ const App: React.FC = () => {
         </button>
 
         <main className="flex-grow w-full">
-          {isLoadingMoonData ? <Loader /> : error ? <div className="text-center text-red-400 p-8 bg-gray-800 rounded-lg">{error}</div> : <MoonDisplay data={moonData} />}
-          <div className="mt-8">
-            {isLoadingApodData ? <Loader /> : apodData && <ApodCard data={apodData} />}
-          </div>
+          {isLoading ? <Loader /> : error ? <div className="text-center text-red-400 p-8 bg-gray-800 rounded-lg">{error}</div> : (
+            <>
+              <MoonDisplay data={moonData} />
+              <div className="mt-8">
+                <ApodCard data={apodData} />
+              </div>
+            </>
+          )}
         </main>
       </div>
     </div>
